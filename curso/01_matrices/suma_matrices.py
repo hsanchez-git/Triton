@@ -5,27 +5,32 @@ import triton.language as tl
 
 # Código que se ejecutará en la GPU
 @triton.jit
-def copiar_vector_kernel(matriz_ptr, salida_ptr, n_columnas, str_filas, str_columnas, str_salida_filas, str_salida_columnas, BLOCK_SIZE: tl.constexpr):
+def sumar_matriz_kernel(matriz1_ptr, matriz2_ptr, salida_ptr, n_columnas, str_filas1, str_columnas1, str_filas2, str_columnas2, str_salida_filas, str_salida_columnas, BLOCK_SIZE: tl.constexpr):
     #comienzo que se repite
     fila = tl.program_id(axis=0)
-    inicio=str_filas * fila
+    inicio1=str_filas1 * fila
     columnas = tl.arange(0, BLOCK_SIZE)
-    offset_entrada=inicio + (str_columnas*columnas)
+    offset_entrada1=inicio1 + (str_columnas1*columnas)
+
+    inicio2=str_filas2 * fila
+    offset_entrada2=inicio2 + (str_columnas2*columnas)
     
     mascara = columnas < n_columnas 
     #cargamos los elementos con el puntero de entrada
-    valores = tl.load (matriz_ptr + offset_entrada, mask=mascara, other = 0.0)
+    valores1 = tl.load (matriz1_ptr + offset_entrada1, mask=mascara, other = 0.0)
+    valores2 = tl.load (matriz2_ptr + offset_entrada2, mask=mascara, other = 0.0)
+    suma=valores1+valores2
     inicio_salida= str_salida_filas*fila
     offset_salida=inicio_salida + (str_salida_columnas*columnas)
     #guardamos en el puntero de salida los elementos
-    tl.store(salida_ptr + offset_salida, valores, mask = mascara)
+    tl.store(salida_ptr + offset_salida, suma, mask = mascara)
 
 
 # Código Python normal que prepara y lanza el kernel
 def sumar_matriz(matriz1, matriz2):
     #vemos cuantos elementos tiene la matriz de entrada
     #Creamos una matriz de salida como la de entrada pero vacio
-
+    
     salida = torch.empty(
     matriz1.shape,
     device=matriz1.device,
@@ -39,16 +44,19 @@ def sumar_matriz(matriz1, matriz2):
     BLOCK_SIZE = triton.next_power_of_2(n_columnas)
     grid=(n_filas,)
     #no se puede hacer el stride en el codigo triton porque es un puntero por eso se hace antes+
-    str_filas = matriz1.stride()[0]
-    str_columnas = matriz1.stride()[1]
+    str_filas1 = matriz1.stride()[0]
+    str_columnas1 = matriz1.stride()[1]
+
+    str_filas2 = matriz2.stride()[0]
+    str_columnas2 = matriz2.stride()[1]
     #hacemos la llamada y aunque de una especie de error es porque pylance no cuenta con triton
-    copiar_vector_kernel[grid](matriz1, salida, n_columnas, str_filas, str_columnas, str_salida_filas, str_salida_columnas,  BLOCK_SIZE=BLOCK_SIZE)
+    sumar_matriz_kernel[grid](matriz1, matriz2, salida, n_columnas, str_filas1, str_columnas1, str_filas2, str_columnas2,str_salida_filas, str_salida_columnas,  BLOCK_SIZE=BLOCK_SIZE)
     return salida
 
 
 def copiar_matriz_pre():
-    matriz1=torch.tensor([[1.0, 2.0, 3.0, 4.0],[5.0, 6.0, 7.0, 8.0],[9.0, 10.0, 11.0, 12.0]], device="cuda", dtype = torch.float32)
-    matriz2=torch.tensor([[1.0, 2.0, 3.0, 4.0],[5.0, 6.0, 7.0, 8.0],[9.0, 10.0, 11.0, 12.0]], device="cuda", dtype = torch.float32)
+    matriz1=torch.tensor([[1.0, 2.0, 3.0],[5.0, 6.0, 7.0],[9.0, 10.0, 11.0]], device="cuda", dtype = torch.float32)
+    matriz2=matriz1.T
     print ("la matriz es: ", matriz1)
     print ("Su shape es: ", matriz1.shape)
     print ("Su num de elementos es: ", matriz1.numel())
@@ -63,6 +71,11 @@ def copiar_matriz_pre():
         resultado = sumar_matriz(matriz1, matriz2)
         print("matrices", matriz1, matriz2)
         print("suma de las matrices: ", resultado)
+        esperado = matriz1 + matriz2
+        torch.testing.assert_close(
+        resultado,
+        esperado,
+        )
     else:
         print("tienen diferente shape")
     

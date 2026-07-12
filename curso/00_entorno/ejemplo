@@ -1,0 +1,46 @@
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def copiar_numero_kernel(entrada_ptr, salida_ptr):
+    valor = tl.load(entrada_ptr)
+
+    tl.store(salida_ptr, valor)
+
+
+def copiar_numero(numero: float) -> float:
+    entrada = torch.tensor(
+        [numero],
+        device="cuda",
+        dtype=torch.float32
+    )
+
+    salida = torch.empty_like(entrada)
+
+    grid = (1,)
+
+    copiar_numero_kernel[grid](
+        entrada,
+        salida
+    )
+
+    return salida.item()
+
+
+def main():
+    numero = 7.5
+
+    resultado = copiar_numero(numero)
+
+    print("Entrada:", numero)
+    print("Salida:", resultado)
+
+    assert resultado == numero
+
+    print("Prueba correcta")
+
+
+if __name__ == "__main__":
+    main()
