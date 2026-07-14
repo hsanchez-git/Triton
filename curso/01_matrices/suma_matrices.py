@@ -54,7 +54,7 @@ def sumar_matriz(matriz1, matriz2):
     return salida
 
 
-def copiar_matriz_pre():
+def sumar_matriz_pre():
     matriz1=torch.tensor([[1.0, 2.0, 3.0],[5.0, 6.0, 7.0],[9.0, 10.0, 11.0]], device="cuda", dtype = torch.float32)
     matriz2=matriz1.T
     print ("la matriz es: ", matriz1)
@@ -86,7 +86,7 @@ def copiar_matriz_pre():
 
 
 def main():
-    copiar_matriz_pre()
+    sumar_matriz_pre()
 
 
 if __name__ == "__main__":
